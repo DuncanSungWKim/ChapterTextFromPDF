@@ -19,7 +19,9 @@
                     "kind": "bin"
                 }
             },
-            "args": [],
+            "args": [
+                "sample.pdf"
+            ],
             "cwd": "${workspaceFolder}"
         },
         {
