@@ -3,12 +3,23 @@ use std::{
 ,   path::Path, fs, io::prelude::*
 };
 
+use lopdf::{
+    Result, Document
+};
 
 
-fn main() {
+
+fn main()
+-> Result<()>
+{
     let fileName = GetPDFFileName() ;
     let mut textExtractor = TextExtractor::newWithSavingFolder( fileName.as_str() ) ;
-    println!("Hello, {}!", fileName );
+    let doc = Document::load( fileName )? ;
+    for pageId in doc.page_iter() {
+        let fonts = doc.get_page_fonts( pageId ) ;
+        let content = doc.get_page_content( pageId )? ;
+    }
+    Ok( () )
 }
 
 
