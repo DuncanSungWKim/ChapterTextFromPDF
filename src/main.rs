@@ -2,9 +2,11 @@ use std::{
     env
 ,   path::Path, fs, io::prelude::*
 };
+use std::collections::BTreeMap ;
 
 use lopdf::{
     Result, Document
+,   Dictionary, content::Content, Object
 };
 
 
@@ -18,6 +20,7 @@ fn main()
     for pageId in doc.page_iter() {
         let fonts = doc.get_page_fonts( pageId ) ;
         let content = doc.get_page_content( pageId )? ;
+        textExtractor.AddPage( &fonts, &Content::decode(&content)? )? ;
     }
     Ok( () )
 }
@@ -37,6 +40,7 @@ struct TextExtractor
 {
     folderName : String
 ,   file : fs::File
+,   text : String
 }
 
 
@@ -56,6 +60,64 @@ impl TextExtractor
         Self {
             folderName : folderName.to_str().unwrap().to_owned()
         ,   file : fs::File::create( &filePath ).unwrap()
+        ,   text : String::new()
+        }
+    }
+
+
+    fn AddPage( &mut self
+    ,   fonts : &BTreeMap<Vec<u8>,&Dictionary>
+    ,   content : &Content
+    )-> Result< () >
+    {
+        let mut currentEncoding = None ;
+        for operation in &content.operations {
+            match operation.operator.as_str() {
+                "Tf" =>{
+                    let fontName = operation.operands[0].as_name()? ;
+                    if let Some(font) = fonts.get( &fontName.to_vec() ) {
+                        currentEncoding = Some( font.get_font_encoding() ) ;
+                    }
+                },
+                "Tj" | "TJ" =>{
+                    self.CollectText( currentEncoding, &operation.operands ) ;
+                },
+                "ET" =>{
+                    if ! self.text.ends_with( '\n' ) {
+                        self.text.push( '\n' ) ;
+                    }
+                },
+                _=>{}
+            }
+        }
+        self.file.write_all( self.text.as_bytes() ) ;
+        self.text.clear() ;
+        Ok( () )
+    }
+
+
+    fn CollectText( &mut self
+    ,   encoding : Option<&str>
+    ,   operands: &[Object]
+    )
+    {
+        for operand in operands.iter() {
+            match *operand {
+                Object::String( ref bytes, _ ) =>{
+                    let text = Document::decode_text( encoding, bytes ) ;
+                    self.text.push_str( &text ) ;
+                },
+                Object::Array( ref array ) =>{
+                    self.CollectText( encoding, array ) ;
+                    self.text.push( ' ' ) ;
+                },
+                Object::Integer( i ) =>{
+                    if i < -100 {
+                        self.text.push( ' ' ) ;
+                    }
+                }
+                _=>{}
+            }
         }
     }
 }
