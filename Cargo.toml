@@ -6,4 +6,4 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lopdf = "0.31.0"
+lopdf = { git = "https://github.com/J-F-Liu/lopdf" }
