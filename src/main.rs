@@ -20,7 +20,7 @@ fn main()
     for pageId in doc.page_iter() {
         let fonts = doc.get_page_fonts( pageId ) ;
         let content = doc.get_page_content( pageId )? ;
-        textExtractor.AddPage( &fonts, &Content::decode(&content)? )? ;
+        textExtractor.AddPage( &fonts, &Content::decode(&content)?, &doc )? ;
     }
     Ok( () )
 }
@@ -42,6 +42,7 @@ struct TextExtractor
 ,   file : fs::File
 ,   text : String
 ,   canWrite : bool
+,   currentFontHeight : f64
 }
 
 
@@ -63,6 +64,7 @@ impl TextExtractor
         ,   file : fs::File::create( &filePath ).unwrap()
         ,   text : String::new()
         ,   canWrite : false
+        ,   currentFontHeight : 0.0
         }
     }
 
@@ -70,6 +72,7 @@ impl TextExtractor
     fn AddPage( &mut self
     ,   fonts : &BTreeMap<Vec<u8>,&Dictionary>
     ,   content : &Content
+    ,   doc : &Document
     )-> Result< () >
     {
         let mut currentEncoding = None ;
@@ -79,6 +82,7 @@ impl TextExtractor
                     let fontName = operation.operands[0].as_name()? ;
                     if let Some(font) = fonts.get( &fontName.to_vec() ) {
                         currentEncoding = Some( font.get_font_encoding() ) ;
+                        self.CheckFontHeight( font, &operation.operands[1], doc ) ;
                     }
                 },
                 "Tj" | "TJ" =>{
@@ -173,5 +177,57 @@ impl TextExtractor
         let filePath = Path::new( &self.folderName ).join( fileName ) ;
         self.file = fs::File::create( &filePath ).unwrap() ;
         self.canWrite = true ;
+    }
+
+
+    fn CheckFontHeight( &mut self
+    ,   font : &Dictionary
+    ,   fontSize : &Object
+    ,   doc : &Document
+    )
+    {
+        let capHeight = if let Ok( descriptor ) = font.get( b"FontDescriptor" ) {
+            match *descriptor {
+                Object::Reference( objId ) => {
+                    let dict = doc.get_dictionary( objId ).unwrap() ;
+                    f64FromWithin( dict.get(b"CapHeight") )
+                }
+            ,   Object::Dictionary( ref dict ) =>
+                    f64FromWithin( dict.get(b"CapHeight") )
+            ,   _ =>
+                    0.0
+            }
+        }
+        else {
+            0.0
+        };
+        let fontSize = f64From( fontSize ) ;
+        self.currentFontHeight = capHeight * fontSize ;
+    }
+}
+
+
+
+fn f64From( object : &Object
+)-> f64
+{
+    match *object {
+        Object::Integer( i ) 
+            => i as f64
+    ,   Object::Real( r ) 
+            => r as f64
+    ,   _ 
+            => 0.0
+    }
+}
+
+fn f64FromWithin( object : Result<&Object>
+)-> f64
+{
+    if let Ok( object ) = object {
+        f64From( object )
+    }
+    else {
+        0.0
     }
 }
