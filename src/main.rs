@@ -41,6 +41,7 @@ struct TextExtractor
     folderName : String
 ,   file : fs::File
 ,   text : String
+,   canWrite : bool
 }
 
 
@@ -61,6 +62,7 @@ impl TextExtractor
             folderName : folderName.to_str().unwrap().to_owned()
         ,   file : fs::File::create( &filePath ).unwrap()
         ,   text : String::new()
+        ,   canWrite : false
         }
     }
 
@@ -90,7 +92,7 @@ impl TextExtractor
                 _=>{}
             }
         }
-        self.file.write_all( self.text.as_bytes() ) ;
+        self.ProcessPage() ;
         self.text.clear() ;
         Ok( () )
     }
@@ -119,5 +121,57 @@ impl TextExtractor
                 _=>{}
             }
         }
+    }
+
+
+    fn ProcessPage( &mut self,
+    )
+    {
+        self.SplitIntoChapters() ;
+        if ! self.canWrite  {
+            return ;
+        }
+        self.file.write_all( self.text.as_bytes() ) ;
+    }
+
+
+    fn SplitIntoChapters( &mut self
+    )
+    {
+        static CHAPTER_STARTER : &str = "Chapter " ;
+
+        if self.text.starts_with( "Introduction" ) {
+            self.canWrite = true ;
+        }
+        else if self.text.starts_with( CHAPTER_STARTER ) {
+            let beginning = CHAPTER_STARTER.len() ;
+            let digits = &self.text[ beginning .. beginning+2 ] ;
+            let number = if let Ok( i ) = digits.parse::<i32>() {
+                i
+            } else {
+                digits.chars().nth(0).unwrap() as i32 - '0' as i32
+            };
+            let fileName = format!( "{:02}", number ) + ".txt" ;
+            self.CreateFile( &fileName ) ;
+        }
+        else if self.text.starts_with( "Appendix" ) {
+            self.CreateFile( "A.txt" ) ;
+        }
+        else if self.text.starts_with( "Part " ) {
+            self.canWrite = false ;
+        }
+        else if self.text.starts_with( "Index" ) {
+            self.canWrite = false ;
+        }
+    }
+
+
+    fn CreateFile( &mut self,
+        fileName : &str
+    )
+    {
+        let filePath = Path::new( &self.folderName ).join( fileName ) ;
+        self.file = fs::File::create( &filePath ).unwrap() ;
+        self.canWrite = true ;
     }
 }
